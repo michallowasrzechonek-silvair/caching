@@ -1,0 +1,80 @@
+version: "2.4"
+
+x-healthcheck-options: &healthcheck-options
+  interval: 10s
+  timeout: 30s
+  retries: 10
+
+services:
+  postgres:
+    image: postgres:11.5
+    restart: on-failure
+    mem_limit: 512m
+    healthcheck:
+      test: for i in project topology; do pg_isready -U postgres -d $$i; done
+      <<: *healthcheck-options
+    volumes:
+      - ./postgres-initdb.d:/docker-entrypoint-initdb.d
+      - postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB_LIST: "project topology"
+      POSTGRES_USER: &postgres-user postgres
+      POSTGRES_PASSWORD: &postgres-password postgres
+
+  redis:
+    image: redis:6
+    restart: on-failure
+    mem_limit: 512m
+    healthcheck:
+      test: redis-cli ping
+      <<: *healthcheck-options
+
+  projects-svc:
+    build:
+      context: ./projects-svc
+    healthcheck:
+      test: curl -q 0.0.0.0:80/health
+      <<: *healthcheck-options
+    volumes:
+      - ./projects-svc:/projects-svc
+    environment:
+      DB_HOST: postgres
+      DB_USER: *postgres-user
+      DB_PASSWORD: *postgres-password
+      DB_NAME: project
+      REDIS_HOST: redis
+
+  commissioning-svc:
+    build:
+      context: ./commissioning-svc
+    healthcheck:
+      test: curl -q 0.0.0.0:80/health
+      <<: *healthcheck-options
+    volumes:
+      - ./commissioning-svc:/commissioning-svc
+    environment:
+      DB_HOST: postgres
+      DB_USER: *postgres-user
+      DB_PASSWORD: *postgres-password
+      DB_NAME: topology
+      REDIS_HOST: redis
+
+  bff-svc:
+    build:
+      context: ./bff-svc
+    healthcheck:
+      test: curl -q 0.0.0.0:80/health
+      <<: *healthcheck-options
+    volumes:
+      - ./bff-svc:/bff-svc
+    environment:
+      PROJECTS_SVC: projects-svc
+      COMMISSIONING_SVC: commissioning-svc
+      REDIS_HOST: redis
+    ports:
+      - 8080:80
+
+volumes:
+  postgres:
+
+# vim: ts=2 sw=2

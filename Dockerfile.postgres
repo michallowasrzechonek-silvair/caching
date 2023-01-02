@@ -1,0 +1,4 @@
+FROM postgres:11.5
+
+RUN apt update && apt install -y python3-pip libpq-dev
+RUN pip3 install 'pgspecial==1.12.1' 'pgcli<3'
