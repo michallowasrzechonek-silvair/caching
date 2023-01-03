@@ -1,4 +1,4 @@
-from typing import List
+from typing import Dict, List, Tuple
 from uuid import UUID
 
 from fastapi import FastAPI, status
@@ -39,8 +39,10 @@ class Zone(CreateZone):
 
 
 def bff_svc() -> FastAPI:
+    cache: Dict[Tuple, client.CacheEntry] = {}
+
     app = FastAPI()
-    app.add_middleware(client.SessionMiddleware)
+    app.add_middleware(client.SessionMiddleware, cache=cache)
 
     @app.get("/projects", response_model=List[Project])
     async def get_projects():

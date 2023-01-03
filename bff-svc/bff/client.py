@@ -1,4 +1,5 @@
 from contextvars import ContextVar
+from dataclasses import dataclass
 from logging import getLogger
 from typing import Any
 
@@ -11,9 +12,44 @@ logger = getLogger("client")
 _session: ContextVar[aiohttp.ClientSession] = ContextVar("_session")
 
 
+@dataclass
+class CacheEntry:
+    etag: str
+    response: Any
+
+
+class CachingSession(aiohttp.ClientSession):
+    def __init__(self, cache, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache = cache
+
+    async def _request(self, method, url, *args, **kwargs):
+        key = (url,)
+
+        if method == "GET":
+            if entry := self.cache.get(key):
+                kwargs.setdefault("headers", {})["If-None-Match"] = entry.etag
+
+        response = await super()._request(method, url, *args, **kwargs)
+
+        if method == "GET":
+            if response.status == 304 and entry:
+                return entry.response
+
+            if response.status == 200:
+                if etag := response.headers.get("ETag"):
+                    self.cache[key] = CacheEntry(etag=etag, response=response)
+
+        return response
+
+
 class SessionMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, cache):
+        super().__init__(app)
+        self.cache = cache
+
     async def dispatch(self, request, call_next):
-        s = aiohttp.ClientSession(raise_for_status=True)
+        s = CachingSession(self.cache, raise_for_status=True)
 
         try:
             _session.set(s)

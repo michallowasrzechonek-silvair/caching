@@ -1,3 +1,4 @@
+from typing import Dict, Tuple
 from uuid import UUID, uuid4
 
 from alembic.command import upgrade as alembic_upgrade
@@ -8,6 +9,7 @@ from pkg_resources import resource_filename
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from projects.cache import CacheEntry, CachingMiddleware
 from projects.database import DB_URL, Area, Project, Zone
 
 
@@ -24,12 +26,15 @@ class CreateZone(BaseModel):
 
 
 def projects_svc() -> FastAPI:
+    cache: Dict[Tuple, CacheEntry] = {}
+
     app = FastAPI()
     app.add_middleware(
         AsyncDBSessionMiddleware,
         db_url=str(DB_URL),
         commit_on_exit=True,
     )
+    app.add_middleware(CachingMiddleware, cache=cache)
 
     @app.on_event("startup")
     async def run_migrations():
