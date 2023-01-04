@@ -28,11 +28,14 @@ setup(
         'fastapi',
         'fastapi_sqlalchemy',
         'uvicorn',
+        'watchfiles',
         'yarl',
     ],
     develop_requires=[
         'black',
+        'flake8',
         'isort',
+        'mypy',
     ],
     tests_require=[]
 )

@@ -18,11 +18,14 @@ setup(
         'aiohttp',
         'fastapi',
         'uvicorn',
+        'watchfiles',
         'yarl',
     ],
     develop_requires=[
         'black',
+        'flake8',
         'isort',
+        'mypy',
     ],
     tests_require=[]
 )
