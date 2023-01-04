@@ -8,6 +8,8 @@ import yarl
 from fastapi import responses
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from bff import context
+
 logger = getLogger("client")
 _session: ContextVar[aiohttp.ClientSession] = ContextVar("_session")
 
@@ -26,9 +28,12 @@ class CachingSession(aiohttp.ClientSession):
     async def _request(self, method, url, *args, **kwargs):
         key = (url,)
 
+        headers = kwargs.setdefault("headers", {})
+        headers.update(context.current_headers())
+
         if method == "GET":
             if entry := self.cache.get(key):
-                kwargs.setdefault("headers", {})["If-None-Match"] = entry.etag
+                headers["If-None-Match"] = entry.etag
 
         response = await super()._request(method, url, *args, **kwargs)
 

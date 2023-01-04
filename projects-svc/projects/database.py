@@ -2,6 +2,7 @@ import os
 
 from sqlalchemy import Column, ForeignKey, Text
 from sqlalchemy.ext.declarative import DeclarativeMeta, declarative_base  # type: ignore
+from sqlalchemy.orm import relationship  # type: ignore
 from yarl import URL
 
 from projects.crud import CrudMixin
@@ -21,7 +22,11 @@ class Project(CrudMixin, Model):
     __tablename__ = "projects"
 
     project_id = Column(Text, primary_key=True)
-    name = Column(Text)
+    name = Column(Text, nullable=False)
+
+    collaborators = relationship(
+        "Collaborator", lazy="joined", cascade="all, delete-orphan", backref="project"
+    )
 
 
 class Area(CrudMixin, Model):
@@ -38,3 +43,11 @@ class Zone(CrudMixin, Model):
     zone_id = Column(Text, primary_key=True, unique=True)
     name = Column(Text, nullable=False)
     area_id = Column(Text, ForeignKey("areas.area_id", ondelete="CASCADE"), primary_key=True)
+
+
+class Collaborator(CrudMixin, Model):
+    __tablename__ = "collaborators"
+
+    project_id = Column(Text, ForeignKey("projects.project_id"), primary_key=True)
+    email = Column(Text, primary_key=True)
+    role = Column(Text, nullable=False)

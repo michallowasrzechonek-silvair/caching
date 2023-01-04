@@ -30,10 +30,10 @@ class CrudMixin:
         # TODO: return session-bound instance(s
 
     @classmethod
-    async def merge(cls, values=None, *args, **kwargs):
-        stmt = cls._insert(values, *args, **kwargs)
+    async def merge(cls, key, /, **data):
+        stmt = cls._insert(**key, **data)
         if stmt is not None:
-            await db.session.execute(stmt.on_conflict_do_nothing())
+            await db.session.execute(stmt.on_conflict_do_update(index_elements=key, set_=data))
 
         # TODO: return session-bound instance(s
 
@@ -54,7 +54,7 @@ class CrudMixin:
     async def select(cls, **kwargs):
         logger.warning("SELECT %s WHERE %s", cls.__name__, kwargs)
         statement = select(cls).filter_by(**kwargs)
-        objs = (await db.session.execute(statement)).scalars().all()
+        objs = (await db.session.execute(statement)).unique().scalars().all()
         return objs
 
     @classmethod

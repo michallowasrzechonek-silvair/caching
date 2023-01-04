@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 from uuid import UUID, uuid4
 
 from alembic.command import upgrade as alembic_upgrade
@@ -9,8 +9,9 @@ from pkg_resources import resource_filename
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from projects import context
 from projects.cache import CacheEntry, CachingMiddleware
-from projects.database import DB_URL, Area, Project, Zone
+from projects.database import DB_URL, Area, Collaborator, Project, Zone
 
 
 class CreateProject(BaseModel):
@@ -25,6 +26,14 @@ class CreateZone(BaseModel):
     name: str
 
 
+class CreateCollaborator(BaseModel):
+    email: str
+    role: str
+
+    class Config:
+        orm_mode = True
+
+
 def projects_svc() -> FastAPI:
     cache: Dict[Tuple, CacheEntry] = {}
 
@@ -35,6 +44,7 @@ def projects_svc() -> FastAPI:
         commit_on_exit=True,
     )
     app.add_middleware(CachingMiddleware, cache=cache)
+    app.add_middleware(context.RequestHeadersMiddleware)
 
     @app.on_event("startup")
     async def run_migrations():
@@ -60,15 +70,41 @@ def projects_svc() -> FastAPI:
     async def post_projects(create_project: CreateProject):
         project_id = uuid4()
         await Project.create(project_id=project_id.hex, name=create_project.name)
+        await Collaborator.create(
+            project_id=project_id.hex, email=context.current_headers().get("x-user"), role="owner"
+        )
         return f"projects/{project_id}"
 
     @app.get("/projects/{project_id}")
     async def get_project(project_id: UUID):
         return await Project.get(project_id=project_id.hex)
 
+    @app.patch("/projects/{project_id}/collaborators", response_model=List[CreateCollaborator])
+    async def patch_collaborators(project_id: UUID, create_collaborators: List[CreateCollaborator]):
+        for collaborator in create_collaborators:
+            await Collaborator.merge(
+                dict(project_id=project_id.hex, email=collaborator.email),
+                role=collaborator.role,
+            )
+
+        return await Collaborator.select(project_id=project_id.hex)
+
+    @app.delete("/projects/{project_id}/collaborators", response_model=List[CreateCollaborator])
+    async def delete_collaborators(project_id: UUID, delete_collaborators: List[str]):
+        for email in delete_collaborators:
+            await Collaborator.delete(project_id=project_id.hex, email=email)
+
+        return await Collaborator.select(project_id=project_id.hex)
+
     @app.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_project(project_id: UUID):
         return await Project.delete(project_id=project_id.hex)
+
+    @app.get("/projects/{project_id}/role")
+    async def get_project_role(project_id: UUID):
+        email = context.current_headers().get("x-user")
+        collaborator = await Collaborator.get(project_id=project_id.hex, email=email)
+        return collaborator.role
 
     @app.get("/projects/{project_id}/areas")
     async def get_areas(project_id: UUID):
