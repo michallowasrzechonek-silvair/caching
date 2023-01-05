@@ -28,6 +28,8 @@ class Project(CrudMixin, Model):
         "Collaborator", lazy="joined", cascade="all, delete-orphan", backref="project"
     )
 
+    areas = relationship("Area", lazy="joined", cascade="all, delete-orphan", backref="project")
+
 
 class Area(CrudMixin, Model):
     __tablename__ = "areas"
@@ -35,6 +37,8 @@ class Area(CrudMixin, Model):
     area_id = Column(Text, primary_key=True, unique=True)
     name = Column(Text, nullable=False)
     project_id = Column(Text, ForeignKey("projects.project_id", ondelete="CASCADE"), primary_key=True)
+
+    zones = relationship("Zone", lazy="joined", cascade="all, delete-orphan", backref="area")
 
 
 class Zone(CrudMixin, Model):

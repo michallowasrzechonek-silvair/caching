@@ -38,9 +38,9 @@ class CrudMixin:
         # TODO: return session-bound instance(s
 
     @classmethod
-    async def get(cls, **kwargs):
-        logger.warning("SELECT %s WHERE %s", cls.__name__, kwargs)
-        statement = select(cls).filter_by(**kwargs)
+    async def get(cls, *args, **kwargs):
+        logger.warning("SELECT %s WHERE %s, %s", cls.__name__, args, kwargs)
+        statement = select(cls).filter(*args, **kwargs)
         obj = (await db.session.execute(statement)).unique().scalars().one_or_none()
         if not obj:
             raise HTTPException(
@@ -51,13 +51,13 @@ class CrudMixin:
         return obj
 
     @classmethod
-    async def select(cls, **kwargs):
-        logger.warning("SELECT %s WHERE %s", cls.__name__, kwargs)
-        statement = select(cls).filter_by(**kwargs)
+    async def select(cls, *args, **kwargs):
+        logger.warning("SELECT %s WHERE %s, %s", cls.__name__, args, kwargs)
+        statement = select(cls).filter(*args, **kwargs)
         objs = (await db.session.execute(statement)).unique().scalars().all()
         return objs
 
     @classmethod
-    async def delete(cls, **kwargs):
-        stmt = delete(cls).filter_by(**kwargs)
+    async def delete(cls, *args, **kwargs):
+        stmt = delete(cls).filter(*args, **kwargs)
         await db.session.execute(stmt)

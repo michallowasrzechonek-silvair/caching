@@ -77,11 +77,11 @@ def projects_svc() -> FastAPI:
 
     @app.get("/projects/{project_id}")
     async def get_project(project_id: UUID):
-        return await Project.get(project_id=project_id.hex)
+        return await Project.get(Project.project_id == project_id.hex)
 
     @app.get("/projects/{project_id}/collaborators", response_model=List[CreateCollaborator])
     async def get_collaborators(project_id: UUID):
-        return await Collaborator.select(project_id=project_id.hex)
+        return await Collaborator.select(Collaborator.project_id == project_id.hex)
 
     @app.patch(
         "/projects/{project_id}/collaborators",
@@ -104,23 +104,25 @@ def projects_svc() -> FastAPI:
     )
     async def delete_collaborators(project_id: UUID, delete_collaborators: List[str]):
         for email in delete_collaborators:
-            await Collaborator.delete(project_id=project_id.hex, email=email)
+            await Collaborator.delete(Collaborator.project_id == project_id.hex, Collaborator.email == email)
 
         return f"/projects/{project_id.hex}/collaborators"
 
     @app.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_project(project_id: UUID):
-        return await Project.delete(project_id=project_id.hex)
+        return await Project.delete(Project.project_id == project_id.hex)
 
     @app.get("/projects/{project_id}/role")
     async def get_project_role(project_id: UUID):
         email = context.current_headers().get("x-user")
-        collaborator = await Collaborator.get(project_id=project_id.hex, email=email)
+        collaborator = await Collaborator.get(
+            Collaborator.project_id == project_id.hex, Collaborator.email == email
+        )
         return collaborator.role
 
     @app.get("/projects/{project_id}/areas")
     async def get_areas(project_id: UUID):
-        return await Area.select(project_id=project_id.hex)
+        return await Area.select(Area.project_id == project_id.hex)
 
     @app.post(
         "/projects/{project_id}/areas",
@@ -129,21 +131,21 @@ def projects_svc() -> FastAPI:
     )
     async def post_areas(project_id: UUID, create_area: CreateArea):
         area_id = uuid4()
-        await Area.create(project_id=project_id.hex, area_id=area_id.hex, name=create_area.name)
+        project = await Project.get(Project.project_id == project_id.hex)
+        await Area.create(project_id=project.project_id, area_id=area_id.hex, name=create_area.name)
         return f"/projects/{project_id.hex}/areas/{area_id.hex}"
 
     @app.get("/projects/{project_id}/areas/{area_id}")
     async def get_area(project_id: UUID, area_id: UUID):
-        return await Area.get(project_id=project_id.hex, area_id=area_id.hex)
+        return await Area.get(Area.project_id == project_id.hex, Area.area_id == area_id.hex)
 
     @app.delete("/projects/{project_id}/areas/{area_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_area(project_id: UUID, area_id: UUID):
-        return await Area.delete(project_id=project_id.hex, area_id=area_id.hex)
+        return await Area.delete(Area.project_id == project_id.hex, Area.area_id == area_id.hex)
 
     @app.get("/projects/{project_id}/areas/{area_id}/zones")
     async def get_zones(project_id: UUID, area_id: UUID):
-        area = await Area.get(project_id=project_id.hex, area_id=area_id.hex)
-        return await Zone.select(area_id=area.area_id)
+        return await Zone.select(Area.project_id == project_id.hex, Zone.area_id == area_id.hex)
 
     @app.post(
         "/projects/{project_id}/areas/{area_id}/zones",
@@ -152,22 +154,23 @@ def projects_svc() -> FastAPI:
     )
     async def post_zones(project_id: UUID, area_id: UUID, create_zone: CreateZone):
         zone_id = uuid4()
-        area = await Area.get(project_id=project_id.hex, area_id=area_id.hex)
+        area = await Area.get(Project.project_id == project_id.hex, Area.area_id == area_id.hex)
         await Zone.create(area_id=area.area_id, zone_id=zone_id.hex, name=create_zone.name)
         return f"/projects/{project_id.hex}/areas/{area_id.hex}/zones/{zone_id.hex}"
 
     @app.get("/projects/{project_id}/areas/{area_id}/zones/{zone_id}")
     async def get_zone(project_id: UUID, area_id: UUID, zone_id: UUID):
-        area = await Area.get(project_id=project_id.hex, area_id=area_id.hex)
-        return await Zone.get(area_id=area.area_id, zone_id=zone_id.hex)
+        return await Zone.get(
+            Project.project_id == project_id.hex, Area.area_id == area_id.hex, Zone.zone_id == zone_id.hex
+        )
 
     @app.delete(
         "/projects/{project_id}/areas/{area_id}/zones/{zone_id}",
         status_code=status.HTTP_204_NO_CONTENT,
     )
     async def delete_zone(project_id: UUID, area_id: UUID, zone_id: UUID):
-        area = await Area.get(project_id=project_id.hex, area_id=area_id.hex)
-        return await Zone.delete(area_id=area.area_id, zone_id=zone_id.hex)
+        area = await Area.get(Project.project_id == project_id.hex, Area.area_id == area_id.hex)
+        return await Zone.delete(Zone.area_id == area.area_id, Zone.zone_id == zone_id.hex)
 
     @app.get("/health")
     async def get_health():

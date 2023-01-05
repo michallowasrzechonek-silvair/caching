@@ -7,18 +7,12 @@ from pydantic import BaseModel
 from bff import client, context, role, urls
 
 
-class CreateProject(BaseModel):
+class CreateZone(BaseModel):
     name: str
 
 
-class Collaborator(BaseModel):
-    email: str
-    role: str
-
-
-class Project(CreateProject):
-    project_id: str
-    collaborators: List[Collaborator]
+class Zone(CreateZone):
+    zone_id: str
 
 
 class CreateArea(BaseModel):
@@ -27,11 +21,7 @@ class CreateArea(BaseModel):
 
 class Area(CreateArea):
     area_id: str
-    project_id: str
-
-
-class CreateZone(BaseModel):
-    name: str
+    zones: List[Zone]
 
 
 class CreateCollaborator(BaseModel):
@@ -39,10 +29,18 @@ class CreateCollaborator(BaseModel):
     role: str
 
 
-class Zone(CreateZone):
-    zone_id: str
-    area_id: str
+class Collaborator(CreateCollaborator):
     project_id: str
+
+
+class CreateProject(BaseModel):
+    name: str
+
+
+class Project(CreateProject):
+    project_id: str
+    collaborators: List[Collaborator]
+    areas: List[Area]
 
 
 def bff_svc() -> FastAPI:
