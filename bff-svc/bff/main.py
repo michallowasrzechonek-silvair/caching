@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import List
 from uuid import UUID
 
 from fastapi import FastAPI, status
@@ -44,7 +44,7 @@ class Project(CreateProject):
 
 
 def bff_svc() -> FastAPI:
-    cache: Dict[Tuple, client.CacheEntry] = {}
+    cache = client.MemoryCache()
 
     app = FastAPI()
     app.add_middleware(role.RoleMiddleware)

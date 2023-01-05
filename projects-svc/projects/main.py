@@ -1,16 +1,16 @@
-from typing import Dict, List, Tuple
+from typing import List
 from uuid import UUID, uuid4
 
 from alembic.command import upgrade as alembic_upgrade
 from alembic.config import Config as alembic_config
-from fastapi import FastAPI, responses, status
+from fastapi import Depends, FastAPI, responses, status
 from fastapi_sqlalchemy import AsyncDBSessionMiddleware
 from pkg_resources import resource_filename
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from projects import context
-from projects.cache import CacheEntry, CachingMiddleware
+from projects.cache import CachingMiddleware, MemoryCache
 from projects.database import DB_URL, Area, Collaborator, Project, Zone
 
 
@@ -35,7 +35,7 @@ class CreateCollaborator(BaseModel):
 
 
 def projects_svc() -> FastAPI:
-    cache: Dict[Tuple, CacheEntry] = {}
+    cache = MemoryCache()
 
     app = FastAPI()
     app.add_middleware(

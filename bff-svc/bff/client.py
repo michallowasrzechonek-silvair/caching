@@ -7,6 +7,7 @@ from typing import Any
 import aiohttp
 import yarl
 from fastapi import responses
+from starlette.datastructures import URL, Headers
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from bff import context
@@ -30,18 +31,21 @@ class CachingResponse(aiohttp.ClientResponse):
         await super().start(conn)
 
         if self.method == "GET":
-            key = (self.url,)
-
             if self.status == 200:
                 if etag := self.headers.get("ETag"):
-                    self.cache[key] = CacheEntry(etag=etag, response=self)
+                    self.cache.store(
+                        self.url,
+                        request_headers=self._request_info.headers,
+                        response_headers=self.headers,
+                        etag=etag,
+                        response=self,
+                    )
 
-            entry = self.cache.get(key)
-
-            if self.status == 304 and entry:
-                self.status = entry.response.status
-                self.reason = entry.response.reason
-                self._body = entry.response._body
+            if self.status == 304:
+                if entry := self.cache.get(self.url, request_headers=self._request_info.headers):
+                    self.status = entry.response.status
+                    self.reason = entry.response.reason
+                    self._body = entry.response._body
 
         return self
 
@@ -55,7 +59,7 @@ class CachingRequest(aiohttp.ClientRequest):
         self.headers.update(context.current_headers())
 
         if self.method == "GET":
-            if entry := self.cache.get(self.url, self.headers):
+            if entry := self.cache.get(self.url, request_headers=self.headers):
                 self.headers["If-None-Match"] = entry.etag
 
         return await super().send(conn)
@@ -142,3 +146,33 @@ def delete(
     url: yarl.URL, allow_redirects: bool = True, **kwargs: Any
 ) -> aiohttp.client._RequestContextManager:
     return aiohttp.ClientSession.delete(_session.get(), url, allow_redirects=allow_redirects, **kwargs)
+
+
+class MemoryCache:
+    """
+    Response may contain a 'Vary' header, telling us which *request* headers (besides the URL) should be taken
+    into account when constructing the cache key.
+
+    We store this infromation per-URL when populating the cache, and use it when querying cached responses.
+
+    See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Vary
+    """
+
+    def __init__(self):
+        self.entries = {}
+        self.vary_headers = {}
+
+    def get_key(self, url: URL, request_headers: Headers):
+        vary_headers = self.vary_headers.get(url, ())
+        return frozenset({url, *((name, request_headers.get(name)) for name in vary_headers)})
+
+    def store(self, url: URL, request_headers: Headers, response_headers: Headers, etag, response):
+        if vary := response_headers.get("vary"):
+            self.vary_headers[url] = tuple(i.strip().lower() for i in vary.split(";") if i)
+
+        key = self.get_key(url, request_headers)
+        self.entries[key] = CacheEntry(etag, response)
+
+    def get(self, url, request_headers):
+        key = self.get_key(url, request_headers)
+        return self.entries.get(key)

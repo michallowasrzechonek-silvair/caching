@@ -65,3 +65,12 @@ external client doesn't use it.
 
 Such a cache allows us to avoid querying databases when their content hasn't been
 modified.
+
+## Cache keys
+
+Resources returned by internal services are cached in `bff`'s RAM, while services themselves keep only the
+ETag value, in order to compare `If-None-Match` header provided by the `bff`, and send back a `304 Not
+Modified` response without querying the database. Such a response has an empty body.
+
+When sending back a real resource, services include an `ETag` header with hash of the generated JSON document,
+and also a `Vary` header, informing `bff` which HTTP headers were used to construct the cache key.
