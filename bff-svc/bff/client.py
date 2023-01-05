@@ -1,5 +1,6 @@
 from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import partial
 from logging import getLogger
 from typing import Any
 
@@ -20,32 +21,63 @@ class CacheEntry:
     response: Any
 
 
-class CachingSession(aiohttp.ClientSession):
-    def __init__(self, cache, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class CachingResponse(aiohttp.ClientResponse):
+    def __init__(self, *args, cache, **kwargs):
         self.cache = cache
+        super().__init__(*args, **kwargs)
 
-    async def _request(self, method, url, *args, **kwargs):
-        key = (url,)
+    async def start(self, conn):
+        await super().start(conn)
 
-        headers = kwargs.setdefault("headers", {})
-        headers.update(context.current_headers())
+        if self.method == "GET":
+            key = (self.url,)
 
-        if method == "GET":
-            if entry := self.cache.get(key):
-                headers["If-None-Match"] = entry.etag
+            if self.status == 200:
+                if etag := self.headers.get("ETag"):
+                    self.cache[key] = CacheEntry(etag=etag, response=self)
 
-        response = await super()._request(method, url, *args, **kwargs)
+            entry = self.cache.get(key)
 
-        if method == "GET":
-            if response.status == 304 and entry:
-                return entry.response
+            if self.status == 304 and entry:
+                self.status = entry.response.status
+                self.reason = entry.response.reason
+                self._body = entry.response._body
 
-            if response.status == 200:
-                if etag := response.headers.get("ETag"):
-                    self.cache[key] = CacheEntry(etag=etag, response=response)
+        return self
 
-        return response
+
+class CachingRequest(aiohttp.ClientRequest):
+    def __init__(self, *args, cache, **kwargs):
+        self.cache = cache
+        super().__init__(*args, **kwargs)
+
+    async def send(self, conn):
+        self.headers.update(context.current_headers())
+
+        if self.method == "GET":
+            if entry := self.cache.get(self.url, self.headers):
+                self.headers["If-None-Match"] = entry.etag
+
+        return await super().send(conn)
+
+
+class CachingSession(aiohttp.ClientSession):
+    """
+    When we POST, and the service responds with 303, we follow the redirection but want to immediately
+    cache the resource we've been redirected to
+
+    We need to override the response class, as `aiohttp.ClientSession_request()` uses an internal loop to
+    follow redirections
+    """
+
+    def __init__(self, cache, *args, **kwargs):
+        super().__init__(
+            *args,
+            request_class=partial(CachingRequest, cache=cache),
+            response_class=partial(CachingResponse, cache=cache),
+            **kwargs,
+        )
+        self.cache = cache
 
 
 class SessionMiddleware(BaseHTTPMiddleware):
@@ -84,17 +116,29 @@ def head(
     return aiohttp.ClientSession.head(_session.get(), url, allow_redirects=allow_redirects, **kwargs)
 
 
-def post(url: yarl.URL, *, data: Any = None, **kwargs: Any) -> aiohttp.client._RequestContextManager:
+def post(
+    url: yarl.URL, *, allow_redirects: bool = True, data: Any = None, **kwargs: Any
+) -> aiohttp.client._RequestContextManager:
     return aiohttp.ClientSession.post(_session.get(), url, data=data, **kwargs)
 
 
-def put(url: yarl.URL, *, data: Any = None, **kwargs: Any) -> aiohttp.client._RequestContextManager:
-    return aiohttp.ClientSession.put(_session.get(), url, data=data, **kwargs)
+def put(
+    url: yarl.URL, *, allow_redirects: bool = True, data: Any = None, **kwargs: Any
+) -> aiohttp.client._RequestContextManager:
+    return aiohttp.ClientSession.put(
+        _session.get(), url, allow_redirects=allow_redirects, data=data, **kwargs
+    )
 
 
-def patch(url: yarl.URL, *, data: Any = None, **kwargs: Any) -> aiohttp.client._RequestContextManager:
-    return aiohttp.ClientSession.patch(_session.get(), url, data=data, **kwargs)
+def patch(
+    url: yarl.URL, *, allow_redirects: bool = True, data: Any = None, **kwargs: Any
+) -> aiohttp.client._RequestContextManager:
+    return aiohttp.ClientSession.patch(
+        _session.get(), url, allow_redirects=allow_redirects, data=data, **kwargs
+    )
 
 
-def delete(url: yarl.URL, **kwargs: Any) -> aiohttp.client._RequestContextManager:
-    return aiohttp.ClientSession.delete(_session.get(), url, **kwargs)
+def delete(
+    url: yarl.URL, allow_redirects: bool = True, **kwargs: Any
+) -> aiohttp.client._RequestContextManager:
+    return aiohttp.ClientSession.delete(_session.get(), url, allow_redirects=allow_redirects, **kwargs)

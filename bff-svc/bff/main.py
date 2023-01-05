@@ -73,6 +73,11 @@ def bff_svc() -> FastAPI:
         async with client.delete(urls.PROJECTS_SVC / "projects" / project_id):
             return None
 
+    @app.get("/projects/{project_id}/collaborators")
+    async def get_collaborators(project_id: str):
+        async with client.get(urls.PROJECTS_SVC / "projects" / project_id / "collaborators") as response:
+            return await response.json()
+
     @app.patch("/projects/{project_id}/collaborators")
     async def patch_collaborators(project_id: str, create_collaborators: List[CreateCollaborator]):
         async with client.patch(

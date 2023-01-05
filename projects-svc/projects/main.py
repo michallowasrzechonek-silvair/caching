@@ -73,13 +73,21 @@ def projects_svc() -> FastAPI:
         await Collaborator.create(
             project_id=project_id.hex, email=context.current_headers().get("x-user"), role="owner"
         )
-        return f"projects/{project_id}"
+        return f"/projects/{project_id.hex}"
 
     @app.get("/projects/{project_id}")
     async def get_project(project_id: UUID):
         return await Project.get(project_id=project_id.hex)
 
-    @app.patch("/projects/{project_id}/collaborators", response_model=List[CreateCollaborator])
+    @app.get("/projects/{project_id}/collaborators", response_model=List[CreateCollaborator])
+    async def get_collaborators(project_id: UUID):
+        return await Collaborator.select(project_id=project_id.hex)
+
+    @app.patch(
+        "/projects/{project_id}/collaborators",
+        response_class=responses.RedirectResponse,
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
     async def patch_collaborators(project_id: UUID, create_collaborators: List[CreateCollaborator]):
         for collaborator in create_collaborators:
             await Collaborator.merge(
@@ -87,14 +95,18 @@ def projects_svc() -> FastAPI:
                 role=collaborator.role,
             )
 
-        return await Collaborator.select(project_id=project_id.hex)
+        return f"/projects/{project_id.hex}/collaborators"
 
-    @app.delete("/projects/{project_id}/collaborators", response_model=List[CreateCollaborator])
+    @app.delete(
+        "/projects/{project_id}/collaborators",
+        response_class=responses.RedirectResponse,
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
     async def delete_collaborators(project_id: UUID, delete_collaborators: List[str]):
         for email in delete_collaborators:
             await Collaborator.delete(project_id=project_id.hex, email=email)
 
-        return await Collaborator.select(project_id=project_id.hex)
+        return f"/projects/{project_id.hex}/collaborators"
 
     @app.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_project(project_id: UUID):
@@ -118,7 +130,7 @@ def projects_svc() -> FastAPI:
     async def post_areas(project_id: UUID, create_area: CreateArea):
         area_id = uuid4()
         await Area.create(project_id=project_id.hex, area_id=area_id.hex, name=create_area.name)
-        return f"projects/{project_id}/areas/{area_id}"
+        return f"/projects/{project_id.hex}/areas/{area_id.hex}"
 
     @app.get("/projects/{project_id}/areas/{area_id}")
     async def get_area(project_id: UUID, area_id: UUID):
@@ -142,7 +154,7 @@ def projects_svc() -> FastAPI:
         zone_id = uuid4()
         area = await Area.get(project_id=project_id.hex, area_id=area_id.hex)
         await Zone.create(area_id=area.area_id, zone_id=zone_id.hex, name=create_zone.name)
-        return f"projects/{project_id}/areas/{area_id}/zones/{zone_id}"
+        return f"/projects/{project_id.hex}/areas/{area_id.hex}/zones/{zone_id.hex}"
 
     @app.get("/projects/{project_id}/areas/{area_id}/zones/{zone_id}")
     async def get_zone(project_id: UUID, area_id: UUID, zone_id: UUID):
