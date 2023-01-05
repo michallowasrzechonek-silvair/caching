@@ -59,8 +59,10 @@ def projects_svc() -> FastAPI:
             await connection.run_sync(upgrade, config)
 
     @app.get("/projects")
-    async def get_projects():
-        return await Project.select()
+    async def get_projects(response: responses.Response, cache_vary=Depends(cache.vary)):
+        cache_vary('X-User')
+        user = context.current_headers().get('x-user')
+        return await Project.select(Project.collaborators.any(Collaborator.email == user))
 
     @app.post(
         "/projects",
