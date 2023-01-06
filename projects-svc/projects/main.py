@@ -85,12 +85,33 @@ def projects_svc() -> FastAPI:
         return f"/projects/{project_id.hex}"
 
     @app.get("/projects/{project_id}")
-    async def get_project(project_id: UUID):
-        return await Project.get(Project.project_id == project_id.hex)
+    async def get_project(project_id: UUID, cache_vary=Depends(cache.vary)):
+        project = await Project.get(Project.project_id == project_id.hex)
+
+        with cache_vary() as invalidate:
+            invalidate(Project, project_id=project_id.hex)
+            invalidate(Area, project_id=project_id.hex)
+            invalidate(Collaborator, project_id=project_id.hex)
+
+        return project
+
+    @app.patch(
+        "/projects/{project_id}",
+        response_class=responses.RedirectResponse,
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    async def patch_project(project_id: UUID, patch_project: CreateProject):
+        await Project.merge(dict(project_id=project_id.hex), name=patch_project.name)
+        return f"/projects/{project_id.hex}"
 
     @app.get("/projects/{project_id}/collaborators", response_model=List[CreateCollaborator])
-    async def get_collaborators(project_id: UUID):
-        return await Collaborator.select(Collaborator.project_id == project_id.hex)
+    async def get_collaborators(project_id: UUID, cache_vary=Depends(cache.vary)):
+        collaborators = await Collaborator.select(Collaborator.project_id == project_id.hex)
+
+        with cache_vary() as invalidate:
+            invalidate(Collaborator, project_id=project_id.hex)
+
+        return collaborators
 
     @app.patch(
         "/projects/{project_id}/collaborators",
@@ -122,16 +143,25 @@ def projects_svc() -> FastAPI:
         return await Project.delete(Project.project_id == project_id.hex)
 
     @app.get("/projects/{project_id}/role")
-    async def get_project_role(project_id: UUID):
+    async def get_project_role(project_id: UUID, cache_vary=Depends(cache.vary)):
         email = context.current_headers().get("x-user")
         collaborator = await Collaborator.get(
             Collaborator.project_id == project_id.hex, Collaborator.email == email
         )
+
+        with cache_vary("x-user") as invalidate:
+            invalidate(Collaborator, project_id=project_id.hex, email=email)
+
         return collaborator.role
 
     @app.get("/projects/{project_id}/areas")
-    async def get_areas(project_id: UUID):
-        return await Area.select(Area.project_id == project_id.hex)
+    async def get_areas(project_id: UUID, cache_vary=Depends(cache.vary)):
+        areas = await Area.select(Area.project_id == project_id.hex)
+
+        with cache_vary() as invalidate:
+            invalidate(Area, project_id=project_id.hex)
+
+        return areas
 
     @app.post(
         "/projects/{project_id}/areas",
@@ -140,21 +170,42 @@ def projects_svc() -> FastAPI:
     )
     async def post_areas(project_id: UUID, create_area: CreateArea):
         area_id = uuid4()
-        project = await Project.get(Project.project_id == project_id.hex)
-        await Area.create(project_id=project.project_id, area_id=area_id.hex, name=create_area.name)
+        await Project.get(Project.project_id == project_id.hex)
+        await Area.create(project_id=project_id.hex, area_id=area_id.hex, name=create_area.name)
         return f"/projects/{project_id.hex}/areas/{area_id.hex}"
 
     @app.get("/projects/{project_id}/areas/{area_id}")
-    async def get_area(project_id: UUID, area_id: UUID):
-        return await Area.get(Area.project_id == project_id.hex, Area.area_id == area_id.hex)
+    async def get_area(project_id: UUID, area_id: UUID, cache_vary=Depends(cache.vary)):
+        area = await Area.get(Area.project_id == project_id.hex, Area.area_id == area_id.hex)
+
+        with cache_vary() as invalidate:
+            invalidate(Area, project_id=project_id.hex, area_id=area_id.hex)
+            invalidate(Zone, area_id=area_id.hex)
+
+        return area
+
+    @app.patch(
+        "/projects/{project_id}/areas/{area_id}",
+        response_class=responses.RedirectResponse,
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    async def patch_area(project_id: UUID, area_id: UUID, patch_area: CreateArea):
+        await Area.merge(dict(project_id=project_id.hex, area_id=area_id.hex), name=patch_area.name)
+
+        return f"/projects/{project_id.hex}/areas/{area_id.hex}"
 
     @app.delete("/projects/{project_id}/areas/{area_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_area(project_id: UUID, area_id: UUID):
         return await Area.delete(Area.project_id == project_id.hex, Area.area_id == area_id.hex)
 
     @app.get("/projects/{project_id}/areas/{area_id}/zones")
-    async def get_zones(project_id: UUID, area_id: UUID):
-        return await Zone.select(Area.project_id == project_id.hex, Zone.area_id == area_id.hex)
+    async def get_zones(project_id: UUID, area_id: UUID, cache_vary=Depends(cache.vary)):
+        zones = await Zone.select(Area.project_id == project_id.hex, Zone.area_id == area_id.hex)
+
+        with cache_vary() as invalidate:
+            invalidate(Zone, area_id=area_id.hex)
+
+        return zones
 
     @app.post(
         "/projects/{project_id}/areas/{area_id}/zones",
@@ -163,23 +214,41 @@ def projects_svc() -> FastAPI:
     )
     async def post_zones(project_id: UUID, area_id: UUID, create_zone: CreateZone):
         zone_id = uuid4()
-        area = await Area.get(Project.project_id == project_id.hex, Area.area_id == area_id.hex)
-        await Zone.create(area_id=area.area_id, zone_id=zone_id.hex, name=create_zone.name)
+        await Area.get(Project.project_id == project_id.hex, Area.area_id == area_id.hex)
+        await Zone.create(area_id=area_id.hex, zone_id=zone_id.hex, name=create_zone.name)
         return f"/projects/{project_id.hex}/areas/{area_id.hex}/zones/{zone_id.hex}"
 
     @app.get("/projects/{project_id}/areas/{area_id}/zones/{zone_id}")
-    async def get_zone(project_id: UUID, area_id: UUID, zone_id: UUID):
-        return await Zone.get(
+    async def get_zone(project_id: UUID, area_id: UUID, zone_id: UUID, cache_vary=Depends(cache.vary)):
+        zone = await Zone.get(
             Project.project_id == project_id.hex, Area.area_id == area_id.hex, Zone.zone_id == zone_id.hex
         )
+
+        with cache_vary() as invalidate:
+            invalidate(Zone, zone_id=zone_id.hex)
+
+        return zone
+
+    @app.patch(
+        "/projects/{project_id}/areas/{area_id}/zones/{zone_id}",
+        response_class=responses.RedirectResponse,
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    async def patch_zone(
+        project_id: UUID, area_id: UUID, zone_id: UUID, patch_zone: CreateZone, cache_vary=Depends(cache.vary)
+    ):
+        await Area.get(Project.project_id == project_id.hex, Area.area_id == area_id.hex)
+        await Zone.merge(dict(area_id=area_id.hex, zone_id=zone_id.hex), name=patch_zone.name)
+
+        return f"/projects/{project_id.hex}/areas/{area_id.hex}/zones/{zone_id.hex}"
 
     @app.delete(
         "/projects/{project_id}/areas/{area_id}/zones/{zone_id}",
         status_code=status.HTTP_204_NO_CONTENT,
     )
     async def delete_zone(project_id: UUID, area_id: UUID, zone_id: UUID):
-        area = await Area.get(Project.project_id == project_id.hex, Area.area_id == area_id.hex)
-        return await Zone.delete(Zone.area_id == area.area_id, Zone.zone_id == zone_id.hex)
+        await Area.get(Project.project_id == project_id.hex, Area.area_id == area_id.hex)
+        return await Zone.delete(Zone.area_id == area_id.hex, Zone.zone_id == zone_id.hex)
 
     @app.get("/health")
     async def get_health():
