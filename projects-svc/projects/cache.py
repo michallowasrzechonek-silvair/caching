@@ -1,5 +1,6 @@
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
+from functools import partial
 from hashlib import sha1
 from typing import List, Optional, Tuple
 
@@ -12,6 +13,39 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 class CacheEntry:
     etag: str
     headers: list
+
+
+@contextmanager
+def Subscriber(handler, *args, **kwargs):
+    """
+    When a view constructs the cache key, it should then subscribe to signals
+    emitted by database models to invalidate its key.
+
+    The invalidation should only happen when modified model instances match the
+    filter used by the view to generate a resource.
+
+    Note: we can't use SQL clauses here, because signal provides the instance
+    as a dictionary, so we would need to run queries on the application side.
+    This means that if you need relationships, subscribe to the signal in
+    related models, directly.
+
+    See CrudMixin.notify
+    """
+    handler = partial(handler, *args, **kwargs)
+
+    callbacks = set()
+
+    def subscribe(model, /, **filters):
+        async def callback(**mapping):
+            if filters.items() & mapping.items() == filters.items():
+                for c in callbacks:
+                    model.unsubscribe(c)
+
+                return handler()
+
+        model.subscribe(callback)
+
+    yield subscribe
 
 
 class MemoryCache:
@@ -31,7 +65,8 @@ class MemoryCache:
     def vary(self, request: Request, response: Response):
         def _vary(*vary_headers):
             response.headers.setdefault("Vary", self._dump_vary(vary_headers))
-            return self._create_key(str(request.url), request.headers, vary_headers)
+            cache_key = self._create_key(str(request.url), request.headers, vary_headers)
+            return Subscriber(self.invalidate, cache_key)
 
         return _vary
 
@@ -52,6 +87,9 @@ class MemoryCache:
     def get(self, url: str, request_headers: Headers):
         key = self._get_key(url, request_headers)
         return self.entries.get(key)
+
+    def invalidate(self, key):
+        self.entries.pop(key, None)
 
 
 class CachingSend:
