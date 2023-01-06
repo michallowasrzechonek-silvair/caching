@@ -60,9 +60,16 @@ def projects_svc() -> FastAPI:
 
     @app.get("/projects")
     async def get_projects(response: responses.Response, cache_vary=Depends(cache.vary)):
-        cache_vary('X-User')
-        user = context.current_headers().get('x-user')
-        return await Project.select(Project.collaborators.any(Collaborator.email == user))
+        user = context.current_headers().get("x-user")
+        projects = await Project.select(Project.collaborators.any(Collaborator.email == user))
+
+        with cache_vary("x-user") as invalidate:
+            for project in projects:
+                invalidate(Project, project_id=project.project_id)
+
+            invalidate(Collaborator, email=user)
+
+        return projects
 
     @app.post(
         "/projects",

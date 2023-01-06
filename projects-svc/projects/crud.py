@@ -50,22 +50,22 @@ class CrudMixin:
         cls._signal().disconnect(callback)
 
     @classmethod
-    async def notify(cls, objects):
+    async def notify(cls, objects, action):
         signal = cls._signal()
         for i in objects:
-            await signal.emit(**i._mapping)
+            await signal.emit(_action=action, **i._mapping)
 
     @classmethod
     async def create(cls, **kwargs):
         stmt = insert(cls).values(kwargs).returning("*")
         created = await db.session.execute(stmt)
-        await cls.notify(created.fetchall())
+        await cls.notify(created.fetchall(), "create")
 
     @classmethod
     async def merge(cls, key, /, **data):
         stmt = insert(cls).values(**key, **data).returning("*")
         merged = await db.session.execute(stmt.on_conflict_do_update(index_elements=key, set_=data))
-        await cls.notify(merged.fetchall())
+        await cls.notify(merged.fetchall(), "update")
 
     @classmethod
     async def get(cls, *args, **kwargs):
@@ -91,4 +91,4 @@ class CrudMixin:
     async def delete(cls, *args, **kwargs):
         stmt = delete(cls).filter(*args, **kwargs).returning("*")
         deleted = await db.session.execute(stmt)
-        await cls.notify(deleted.fetchall())
+        await cls.notify(deleted.fetchall(), "delete")

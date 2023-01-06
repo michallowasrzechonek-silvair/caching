@@ -37,11 +37,16 @@ def Subscriber(handler, *args, **kwargs):
 
     def subscribe(model, /, **filters):
         async def callback(**mapping):
-            if filters.items() & mapping.items() == filters.items():
-                for c in callbacks:
-                    model.unsubscribe(c)
+            # call the handler only if emitted signal passes the filter
+            if (filters.items() & mapping.items()) != filters.items():
+                return
 
-                return handler()
+            # all callbacks connected by this subscriber point to the same handler, so we can disconnect all
+            # of them when handler gets called
+            for c in callbacks:
+                model.unsubscribe(c)
+
+            return handler()
 
         model.subscribe(callback)
 
