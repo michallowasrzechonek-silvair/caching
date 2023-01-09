@@ -128,6 +128,7 @@ def projects_svc() -> FastAPI:
         collaborators = await Collaborator.select(Collaborator.project_id == project_id)
 
         with cache_vary("x-role") as invalidate:
+            invalidate(Project, project_id=project_id, _action="delete")
             invalidate(Collaborator, project_id=project_id)
 
         return collaborators
@@ -176,6 +177,7 @@ def projects_svc() -> FastAPI:
         )
 
         with cache_vary("x-user") as invalidate:
+            invalidate(Project, project_id=project_id, _action="delete")
             invalidate(Collaborator, project_id=project_id, email=email)
 
         return collaborator.role
@@ -189,6 +191,7 @@ def projects_svc() -> FastAPI:
         areas = await Area.select(Area.project_id == project_id)
 
         with cache_vary("x-role") as invalidate:
+            invalidate(Project, project_id=project_id, _action="delete")
             invalidate(Area, project_id=project_id)
 
         return areas
@@ -246,6 +249,8 @@ def projects_svc() -> FastAPI:
         zones = await Zone.select(Area.project_id == project_id, Zone.area_id == area_id)
 
         with cache_vary("x-role") as invalidate:
+            invalidate(Project, project_id=project_id, _action="delete")
+            invalidate(Area, area_id=area_id, _action="delete")
             invalidate(Zone, area_id=area_id)
 
         return zones
@@ -272,6 +277,8 @@ def projects_svc() -> FastAPI:
         )
 
         with cache_vary("x-role") as invalidate:
+            invalidate(Project, project_id=project_id, _action="delete")
+            invalidate(Area, area_id=area_id, _action="delete")
             invalidate(Zone, zone_id=zone_id)
 
         return zone
