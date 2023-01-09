@@ -185,6 +185,7 @@ def projects_svc() -> FastAPI:
         dependencies=[project_role()],
     )
     async def get_areas(project_id: str, cache_vary=Depends(cache.vary)):
+        await Project.get(Project.project_id == project_id)
         areas = await Area.select(Area.project_id == project_id)
 
         with cache_vary("x-role") as invalidate:
@@ -241,6 +242,7 @@ def projects_svc() -> FastAPI:
         dependencies=[project_role()],
     )
     async def get_zones(project_id: str, area_id: str, cache_vary=Depends(cache.vary)):
+        await Area.get(Area.project_id == project_id, Area.area_id == area_id)
         zones = await Zone.select(Area.project_id == project_id, Zone.area_id == area_id)
 
         with cache_vary("x-role") as invalidate:
