@@ -73,8 +73,19 @@ def bff_svc() -> FastAPI:
 
     @app.post("/projects", response_model=ListProject, status_code=status.HTTP_201_CREATED)
     async def post_projects(create_project: CreateProject):
-        async with client.post(urls.PROJECTS_SVC / "projects", json=create_project.dict()) as response:
-            return await response.json()
+        # FIXME: This is a workaround
+        #
+        # We can't follow the redirection automatically, because RoleMiddleware
+        # doesn't ask for project role if URL doesn't contain the project id.
+        # On the other hand, we've just created the project, so we know are the
+        # owner...
+        async with client.post(
+            urls.PROJECTS_SVC / "projects", json=create_project.dict(), allow_redirects=False
+        ) as create_response:
+            if create_response.status == status.HTTP_201_CREATED:
+                location = urls.PROJECTS_SVC.with_path(create_response.headers["Location"])
+                async with client.get(location, headers={"x-role": "owner"}) as response:
+                    return await response.json()
 
     @app.get("/projects/{project_id}", response_model=Project)
     async def get_project(project_id: str):
