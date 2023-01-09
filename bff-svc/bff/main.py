@@ -1,5 +1,4 @@
 from typing import List
-from uuid import UUID
 
 from fastapi import FastAPI, status
 from pydantic import BaseModel
@@ -192,8 +191,8 @@ def bff_svc() -> FastAPI:
             return None
 
     @app.get("/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes/{node_uuid}")
-    async def get_node(project_id: str, area_id: str, zone_id: str, node_uuid: UUID):
-        async with client.get(urls.COMMISSIONING_SVC / "nodes" / node_uuid.hex) as node_response:
+    async def get_node(project_id: str, area_id: str, zone_id: str, node_uuid: str):
+        async with client.get(urls.COMMISSIONING_SVC / "nodes" / node_uuid) as node_response:
             return await node_response.json()
 
     @app.get("/health")
