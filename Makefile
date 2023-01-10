@@ -1,7 +1,11 @@
 SERVICES=bff projects commissioning
 
 lint: $(foreach SVC,$(SERVICES),$(SVC)-lint)
-format: $(foreach SVC,$(SERVICES),$(SVC)-format)
+format: $(foreach SVC,$(SERVICES),$(SVC)-format) tests-format
+
+tests-format:
+	black tests
+	isort tests
 
 $(foreach SVC,$(SERVICES),$(SVC)-format): %-format:
 	@cd $*-svc && \
