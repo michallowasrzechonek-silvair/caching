@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import FastAPI, status
 from pydantic import BaseModel
@@ -10,6 +10,11 @@ class CreateNode(BaseModel):
     name: str
 
 
+class UpdateNode(BaseModel):
+    name: str = None
+    configuration: Dict = None
+
+
 class ZoneNode(BaseModel):
     node_uuid: str
     name: str
@@ -17,6 +22,7 @@ class ZoneNode(BaseModel):
 
 class Node(BaseModel):
     name: str
+    configuration: Dict
 
 
 class CreateZone(BaseModel):
@@ -76,6 +82,12 @@ class Project(CreateProject):
 class ListProject(BaseModel):
     project_id: str
     name: str
+
+
+class Misconfiguration(BaseModel):
+    name: str
+    current: Any
+    expected: Any
 
 
 def bff_svc() -> FastAPI:
@@ -258,6 +270,22 @@ def bff_svc() -> FastAPI:
         ) as response:
             return await response.json()
 
+    @app.patch(
+        "/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes/{node_uuid}",
+        response_model=Node,
+    )
+    async def patch_node(
+        project_id: str, area_id: str, zone_id: str, node_uuid: str, update_node: UpdateNode
+    ):
+        async with client.get(
+            urls.PROJECTS_SVC / "projects" / project_id / "areas" / area_id / "zones" / zone_id
+        ), client.patch(
+            urls.COMMISSIONING_SVC / "nodes" / node_uuid,
+            json=update_node.dict(exclude_none=True),
+            params=dict(project_id=project_id, zone_id=zone_id),
+        ) as response:
+            return await response.json()
+
     @app.delete(
         "/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes/{node_uuid}",
         status_code=status.HTTP_204_NO_CONTENT,
@@ -270,6 +298,25 @@ def bff_svc() -> FastAPI:
             params=dict(project_id=project_id, zone_id=zone_id),
         ) as response:
             return None
+
+    @app.get(
+        "/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes/{node_uuid}/misconfiguration",
+        response_model=List[Misconfiguration],
+    )
+    async def get_misconfigurations(project_id: str, area_id: str, zone_id: str, node_uuid: str):
+        async with client.get(
+            urls.PROJECTS_SVC / "projects" / project_id / "areas" / area_id / "zones" / zone_id
+        ) as zone_response, client.get(
+            urls.COMMISSIONING_SVC / "nodes" / node_uuid, params=dict(project_id=project_id, zone_id=zone_id)
+        ) as node_response:
+            zone = await zone_response.json()
+            node = await node_response.json()
+
+        # TODO:
+        async with client.post(
+            urls.RECONF_SVC / "misconfiguration", json=dict(zone=zone, node=node)
+        ) as response:
+            return await response.json()
 
     @app.get("/health")
     async def get_health():

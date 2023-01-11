@@ -6,7 +6,7 @@ from alembic.config import Config as alembic_config
 from fastapi import Depends, FastAPI, Query, responses, status
 from fastapi_sqlalchemy import AsyncDBSessionMiddleware
 from pkg_resources import resource_filename
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import cast
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -17,6 +17,12 @@ from commissioning.database import DB_URL, Node
 
 class CreateNode(BaseModel):
     name: str
+    configuration: Dict = Field(default_factory=dict)
+
+
+class UpdateNode(BaseModel):
+    name: str = None
+    configuration: Dict = None
 
 
 def commissioning_svc() -> FastAPI:
@@ -80,6 +86,21 @@ def commissioning_svc() -> FastAPI:
             dict(node_uuid=node_uuid),
             name=create_node.name,
             tags=dict(project_id=project_id, zone_id=zone_id),
+            configuration=create_node.configuration,
+        )
+
+        return f"/nodes/{node_uuid}?project_id={project_id}&zone_id={zone_id}"
+
+    @app.patch(
+        "/nodes/{node_uuid}", response_class=responses.RedirectResponse, status_code=status.HTTP_303_SEE_OTHER
+    )
+    async def patch_node(
+        node_uuid: str, update_node: UpdateNode, project_id: str = Query(...), zone_id: str = Query(...)
+    ):
+        await Node.update(
+            Node.node_uuid == node_uuid,
+            tags=dict(project_id=project_id, zone_id=zone_id),
+            **update_node.dict(exclude_none=True),
         )
 
         return f"/nodes/{node_uuid}?project_id={project_id}&zone_id={zone_id}"

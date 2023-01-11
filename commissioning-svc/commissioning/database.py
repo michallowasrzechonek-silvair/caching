@@ -25,3 +25,5 @@ class Node(CrudMixin, Model):
     name = Column(Text, nullable=False)
 
     tags = Column(JSONB, nullable=False)
+
+    configuration = Column(JSONB, nullable=False)
