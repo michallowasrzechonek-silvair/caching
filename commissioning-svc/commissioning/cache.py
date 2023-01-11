@@ -84,6 +84,11 @@ class MemoryCache:
         return frozenset({url, *((name, request_headers.get(name)) for name in vary_headers)})
 
     def vary(self, request: Request, response: Response):
+        # TODO: cache key should vary on
+        #  - url (only path!)
+        #  - selected headers
+        #  - selected query parameters
+        #  - request body (for POST requests - how?)
         def _vary(*vary_headers):
             response.headers.setdefault("Vary", self._dump_vary(vary_headers))
             cache_key = self._create_key(str(request.url), request.headers, vary_headers)

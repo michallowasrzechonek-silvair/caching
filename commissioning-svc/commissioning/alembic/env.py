@@ -49,7 +49,7 @@ async def run_async_migrations():
     await connectable.dispose()
 
 
-async def run_migrations_online():
+def run_migrations_online():
     """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine

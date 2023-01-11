@@ -6,6 +6,19 @@ from pydantic import BaseModel
 from bff import client, context, role, urls
 
 
+class CreateNode(BaseModel):
+    name: str
+
+
+class ZoneNode(BaseModel):
+    node_uuid: str
+    name: str
+
+
+class Node(BaseModel):
+    name: str
+
+
 class CreateZone(BaseModel):
     name: str
 
@@ -16,8 +29,7 @@ class AreaZone(BaseModel):
 
 
 class Zone(AreaZone):
-    # TODO: nodes
-    pass
+    nodes: List[ZoneNode]
 
 
 class CreateArea(BaseModel):
@@ -180,8 +192,12 @@ def bff_svc() -> FastAPI:
     async def get_zone(project_id: str, area_id: str, zone_id: str):
         async with client.get(
             urls.PROJECTS_SVC / "projects" / project_id / "areas" / area_id / "zones" / zone_id
-        ) as response:
-            return await response.json()
+        ) as zone_response, client.get(
+            urls.COMMISSIONING_SVC / "nodes", params=dict(project_id=project_id, zone_id=zone_id)
+        ) as nodes_response:
+            zone = await zone_response.json()
+            nodes = await nodes_response.json()
+            return {**zone, "nodes": nodes}
 
     @app.patch("/projects/{project_id}/areas/{area_id}/zones/{zone_id}", response_model=Zone)
     async def patch_zone(project_id: str, area_id: str, zone_id: str, patch_zone: CreateZone):
@@ -201,10 +217,51 @@ def bff_svc() -> FastAPI:
         ):
             return None
 
-    @app.get("/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes/{node_uuid}")
-    async def get_node(project_id: str, area_id: str, zone_id: str, node_uuid: str):
-        async with client.get(urls.COMMISSIONING_SVC / "nodes" / node_uuid) as node_response:
+    @app.get("/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes", response_model=List[ZoneNode])
+    async def get_nodes(project_id: str, area_id: str, zone_id: str):
+        async with client.get(
+            urls.PROJECTS_SVC / "projects" / project_id / "areas" / area_id / "zones" / zone_id
+        ), client.get(
+            urls.COMMISSIONING_SVC / "nodes", params=dict(project_id=project_id, zone_id=zone_id)
+        ) as node_response:
             return await node_response.json()
+
+    @app.get("/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes/{node_uuid}", response_model=Node)
+    async def get_node(project_id: str, area_id: str, zone_id: str, node_uuid: str):
+        async with client.get(
+            urls.PROJECTS_SVC / "projects" / project_id / "areas" / area_id / "zones" / zone_id
+        ), client.get(
+            urls.COMMISSIONING_SVC / "nodes" / node_uuid, params=dict(project_id=project_id, zone_id=zone_id)
+        ) as response:
+            return await response.json()
+
+    @app.put(
+        "/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes/{node_uuid}",
+        response_model=Node,
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def put_node(project_id: str, area_id: str, zone_id: str, node_uuid: str, create_node: CreateNode):
+        async with client.get(
+            urls.PROJECTS_SVC / "projects" / project_id / "areas" / area_id / "zones" / zone_id
+        ), client.put(
+            urls.COMMISSIONING_SVC / "nodes" / node_uuid,
+            json=create_node.dict(),
+            params=dict(project_id=project_id, zone_id=zone_id),
+        ) as response:
+            return await response.json()
+
+    @app.delete(
+        "/projects/{project_id}/areas/{area_id}/zones/{zone_id}/nodes/{node_uuid}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    async def delete_node(project_id: str, area_id: str, zone_id: str, node_uuid: str):
+        async with client.get(
+            urls.PROJECTS_SVC / "projects" / project_id / "areas" / area_id / "zones" / zone_id
+        ), client.delete(
+            urls.COMMISSIONING_SVC / "nodes" / node_uuid,
+            params=dict(project_id=project_id, zone_id=zone_id),
+        ) as response:
+            return None
 
     @app.get("/health")
     async def get_health():

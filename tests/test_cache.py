@@ -129,6 +129,7 @@ def test_zone_create(client, project_id, area_id):
     ).json()
     assert zone["zone_id"] == create_zone["zone_id"]
     assert zone["name"] == name
+    assert zone["nodes"] == []
 
     zones = client.get(
         f"http://localhost:8080/projects/{project_id}/areas/{area_id}/zones"
