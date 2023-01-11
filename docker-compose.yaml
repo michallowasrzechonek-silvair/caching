@@ -59,6 +59,17 @@ services:
       DB_NAME: topology
       REDIS_HOST: redis
 
+  reconf-svc:
+    build:
+      context: ./reconf-svc
+    healthcheck:
+      test: curl -q 0.0.0.0:80/health
+      <<: *healthcheck-options
+    volumes:
+      - ./reconf-svc:/reconf-svc
+    environment:
+      REDIS_HOST: redis
+
   bff-svc:
     build:
       context: ./bff-svc
