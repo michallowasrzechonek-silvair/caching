@@ -21,15 +21,23 @@ class Node(BaseModel):
 
 class CreateZone(BaseModel):
     name: str
+    scenario: str = "switch"
+
+
+class UpdateZone(BaseModel):
+    name: str = None
+    scenario: str = None
 
 
 class AreaZone(BaseModel):
     zone_id: str
     name: str
+    scenario: str
 
 
 class Zone(AreaZone):
     nodes: List[ZoneNode]
+    scenario: str
 
 
 class CreateArea(BaseModel):
@@ -199,11 +207,11 @@ def bff_svc() -> FastAPI:
             nodes = await nodes_response.json()
             return {**zone, "nodes": nodes}
 
-    @app.patch("/projects/{project_id}/areas/{area_id}/zones/{zone_id}", response_model=Zone)
-    async def patch_zone(project_id: str, area_id: str, zone_id: str, patch_zone: CreateZone):
+    @app.patch("/projects/{project_id}/areas/{area_id}/zones/{zone_id}", response_model=AreaZone)
+    async def patch_zone(project_id: str, area_id: str, zone_id: str, update_zone: UpdateZone):
         async with client.patch(
             urls.PROJECTS_SVC / "projects" / project_id / "areas" / area_id / "zones" / zone_id,
-            json=patch_zone.dict(),
+            json=update_zone.dict(exclude_none=True),
         ) as response:
             return await response.json()
 

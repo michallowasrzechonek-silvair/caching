@@ -48,6 +48,8 @@ class Zone(CrudMixin, Model):
     name = Column(Text, nullable=False)
     area_id = Column(Text, ForeignKey("areas.area_id", ondelete="CASCADE"), primary_key=True)
 
+    scenario = Column(Text, nullable=False)
+
 
 class Collaborator(CrudMixin, Model):
     __tablename__ = "collaborators"

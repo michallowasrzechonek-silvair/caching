@@ -3,7 +3,7 @@ from logging import getLogger
 
 from fastapi import HTTPException
 from fastapi_sqlalchemy import async_db as db
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert  # type: ignore
 from starlette.status import HTTP_404_NOT_FOUND
 
@@ -60,6 +60,12 @@ class CrudMixin:
         stmt = insert(cls).values(kwargs).returning("*")
         created = await db.session.execute(stmt)
         await cls.notify(created.fetchall(), "create")
+
+    @classmethod
+    async def update(cls, *key, **data):
+        stmt = update(cls).where(*key).values(**data).returning("*")
+        updated = await db.session.execute(stmt)
+        await cls.notify(updated.fetchall(), "update")
 
     @classmethod
     async def merge(cls, key, /, **data):

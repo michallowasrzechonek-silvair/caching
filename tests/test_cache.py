@@ -129,17 +129,20 @@ def test_zone_create(client, project_id, area_id):
     ).json()
     assert zone["zone_id"] == create_zone["zone_id"]
     assert zone["name"] == name
+    assert zone["scenario"] == "switch"
     assert zone["nodes"] == []
 
     zones = client.get(
         f"http://localhost:8080/projects/{project_id}/areas/{area_id}/zones"
     ).json()
-    assert zones == [dict(zone_id=create_zone["zone_id"], name=name)]
+    assert zones == [dict(zone_id=create_zone["zone_id"], name=name, scenario="switch")]
 
     area = client.get(
         f"http://localhost:8080/projects/{project_id}/areas/{area_id}"
     ).json()
-    assert area["zones"] == [dict(zone_id=create_zone["zone_id"], name=name)]
+    assert area["zones"] == [
+        dict(zone_id=create_zone["zone_id"], name=name, scenario="switch")
+    ]
 
 
 @pytest.fixture

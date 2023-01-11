@@ -24,6 +24,12 @@ class CreateArea(BaseModel):
 
 class CreateZone(BaseModel):
     name: str
+    scenario: str
+
+
+class UpdateZone(BaseModel):
+    name: str = None
+    scenario: str = None
 
 
 class CreateCollaborator(BaseModel):
@@ -115,8 +121,8 @@ def projects_svc() -> FastAPI:
         status_code=status.HTTP_303_SEE_OTHER,
         dependencies=[project_role()],
     )
-    async def patch_project(project_id: str, patch_project: CreateProject):
-        await Project.merge(dict(project_id=project_id), name=patch_project.name)
+    async def patch_project(project_id: str, update_project: CreateProject):
+        await Project.update(Project.project_id == project_id, update_project.dict(exclude_none=True))
         return f"/projects/{project_id}"
 
     @app.get(
@@ -227,8 +233,10 @@ def projects_svc() -> FastAPI:
         status_code=status.HTTP_303_SEE_OTHER,
         dependencies=[project_role()],
     )
-    async def patch_area(project_id: str, area_id: str, patch_area: CreateArea):
-        await Area.merge(dict(project_id=project_id, area_id=area_id), name=patch_area.name)
+    async def patch_area(project_id: str, area_id: str, update_area: CreateArea):
+        await Area.update(
+            Area.project_id == project_id, Area.area_id == area_id, **update_area.dict(exclude_none=True)
+        )
 
         return f"/projects/{project_id}/areas/{area_id}"
 
@@ -264,7 +272,9 @@ def projects_svc() -> FastAPI:
     async def post_zones(project_id: str, area_id: str, create_zone: CreateZone):
         zone_id = uuid4().hex
         await Area.get(Project.project_id == project_id, Area.area_id == area_id)
-        await Zone.create(area_id=area_id, zone_id=zone_id, name=create_zone.name)
+        await Zone.create(
+            area_id=area_id, zone_id=zone_id, name=create_zone.name, scenario=create_zone.scenario
+        )
         return f"/projects/{project_id}/areas/{area_id}/zones/{zone_id}"
 
     @app.get(
@@ -290,10 +300,12 @@ def projects_svc() -> FastAPI:
         dependencies=[project_role()],
     )
     async def patch_zone(
-        project_id: str, area_id: str, zone_id: str, patch_zone: CreateZone, cache_vary=Depends(cache.vary)
+        project_id: str, area_id: str, zone_id: str, update_zone: UpdateZone, cache_vary=Depends(cache.vary)
     ):
         await Area.get(Project.project_id == project_id, Area.area_id == area_id)
-        await Zone.merge(dict(area_id=area_id, zone_id=zone_id), name=patch_zone.name)
+        await Zone.update(
+            Zone.area_id == area_id, Zone.zone_id == zone_id, **update_zone.dict(exclude_none=True)
+        )
 
         return f"/projects/{project_id}/areas/{area_id}/zones/{zone_id}"
 
