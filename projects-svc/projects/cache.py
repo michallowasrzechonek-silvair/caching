@@ -80,33 +80,38 @@ class MemoryCache:
     def _parse_vary(self, vary: str):
         return tuple(i.strip().lower() for i in vary.split(";") if i)
 
-    def _create_key(self, url: str, request_headers: Headers, vary_headers: Tuple[str]):
-        return frozenset({url, *((name, request_headers.get(name)) for name in vary_headers)})
+    def _create_key(self, method: str, url: str, request_headers: Headers, vary_headers: Tuple[str]):
+        return frozenset({method, url, *((name, request_headers.get(name)) for name in vary_headers)})
 
     def vary(self, request: Request, response: Response):
         def _vary(*vary_headers):
-            response.headers.setdefault("Vary", self._dump_vary(vary_headers))
-            cache_key = self._create_key(str(request.url), request.headers, vary_headers)
+            response.headers.setdefault("vary", self._dump_vary(vary_headers))
+            cache_key = self._create_key(request.method, str(request.url), request.headers, vary_headers)
             return Subscriber(self.invalidate, cache_key)
 
         return _vary
 
-    def _get_key(self, url: str, request_headers: Headers):
+    def _get_key(self, method: str, url: str, request_headers: Headers):
         vary_headers = self.vary_headers.get(url, ())
-        return self._create_key(url, request_headers, vary_headers)
+        return self._create_key(method, url, request_headers, vary_headers)
 
     def store(
-        self, url: str, request_headers: Headers, response_headers: List[Tuple[bytes, bytes]], etag: str
+        self,
+        method: str,
+        url: str,
+        request_headers: Headers,
+        response_headers: List[Tuple[bytes, bytes]],
+        etag: str,
     ):
         with suppress(StopIteration):
             vary = next(value.decode() for name, value in response_headers if name.decode().lower() == "vary")
             self.vary_headers[url] = self._parse_vary(vary)
 
-        key = self._get_key(url, request_headers)
+        key = self._get_key(method, url, request_headers)
         self.entries[key] = CacheEntry(etag, response_headers)
 
-    def get(self, url: str, request_headers: Headers):
-        key = self._get_key(url, request_headers)
+    def get(self, method: str, url: str, request_headers: Headers):
+        key = self._get_key(method, url, request_headers)
         return self.entries.get(key)
 
     def invalidate(self, key):
@@ -114,14 +119,27 @@ class MemoryCache:
 
 
 class CachingSend:
-    def __init__(self, send: Send, cache: MemoryCache, url, request_headers):
+    def __init__(self, send: Send, cache: MemoryCache, method, url, request_headers):
         self._send = send
         self.cache = cache
+        self.method = method
         self.url = url
         self.request_headers = request_headers
 
         self.response_start: Optional[Message] = None
         self.response_body: List[Message] = []
+
+    @property
+    def should_cache(self):
+        if self.response_start["status"] != 200:
+            return False
+
+        try:
+            vary = next(value.decode() for name, value in self.response_start["headers"] if name == b"vary")
+        except StopIteration:
+            vary = ""
+
+        return self.method == "GET" or vary
 
     async def __call__(self, message: Message):
         # these are the headers
@@ -141,7 +159,7 @@ class CachingSend:
         if not self.response_start:
             raise RuntimeError("Missing `http.response.start` before `http.response.body`")
 
-        if self.response_start["status"] == 200:
+        if self.should_cache:
             content = b"".join(body["body"] for body in self.response_body)
 
             etag = sha1(content).hexdigest()
@@ -149,7 +167,11 @@ class CachingSend:
 
             headers = list(self.response_start["headers"])
             self.cache.store(
-                str(self.url), request_headers=self.request_headers, response_headers=headers, etag=etag
+                self.method,
+                str(self.url),
+                request_headers=self.request_headers,
+                response_headers=headers,
+                etag=etag,
             )
 
         await self._send(self.response_start)
@@ -189,17 +211,18 @@ class CachingMiddleware:
         await send(dict(type="http.response.body", more_body=False))
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        if scope["type"] != "http" or scope["method"] != "GET":
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
+        method = scope["method"]
         url = URL(scope=scope)
         headers = Headers(scope=scope)
 
-        if entry := self.cache.get(str(url), request_headers=headers):
+        if entry := self.cache.get(method, str(url), request_headers=headers):
             if entry.etag == headers.get("If-None-Match"):
                 await self.not_modified(entry, send)
                 return
 
-        caching_send = CachingSend(send, self.cache, url, headers)
+        caching_send = CachingSend(send, self.cache, scope["method"], url, headers)
         await self.app(scope, receive, caching_send)

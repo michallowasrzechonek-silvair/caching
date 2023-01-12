@@ -27,25 +27,34 @@ class CachingResponse(aiohttp.ClientResponse):
         self.cache = cache
         super().__init__(*args, **kwargs)
 
+    @property
+    def should_cache(self):
+        if self.status != 200:
+            return False
+
+        return self._request_info.method == "GET" or self.headers.get("Vary")
+
     async def start(self, conn):
         await super().start(conn)
 
-        if self.method == "GET":
-            if self.status == 200:
-                if etag := self.headers.get("ETag"):
-                    self.cache.store(
-                        self.url,
-                        request_headers=self._request_info.headers,
-                        response_headers=self.headers,
-                        etag=etag,
-                        response=self,
-                    )
+        if self.should_cache:
+            if etag := self.headers.get("ETag"):
+                self.cache.store(
+                    self._request_info.method,
+                    self.url,
+                    request_headers=self._request_info.headers,
+                    response_headers=self.headers,
+                    etag=etag,
+                    response=self,
+                )
 
-            if self.status == 304:
-                if entry := self.cache.get(self.url, request_headers=self._request_info.headers):
-                    self.status = entry.response.status
-                    self.reason = entry.response.reason
-                    self._body = entry.response._body
+        if self.status == 304:
+            if entry := self.cache.get(
+                self._request_info.method, self.url, request_headers=self._request_info.headers
+            ):
+                self.status = entry.response.status
+                self.reason = entry.response.reason
+                self._body = entry.response._body
 
         return self
 
@@ -58,9 +67,8 @@ class CachingRequest(aiohttp.ClientRequest):
     async def send(self, conn):
         self.headers.update(context.current_headers())
 
-        if self.method == "GET":
-            if entry := self.cache.get(self.url, request_headers=self.headers):
-                self.headers["If-None-Match"] = entry.etag
+        if entry := self.cache.get(self.method, self.url, request_headers=self.headers):
+            self.headers["If-None-Match"] = entry.etag
 
         return await super().send(conn)
 
@@ -162,17 +170,19 @@ class MemoryCache:
         self.entries = {}
         self.vary_headers = {}
 
-    def get_key(self, url: URL, request_headers: Headers):
+    def get_key(self, method: str, url: URL, request_headers: Headers):
         vary_headers = self.vary_headers.get(url, ())
-        return frozenset({url, *((name, request_headers.get(name)) for name in vary_headers)})
+        return frozenset({method, url, *((name, request_headers.get(name)) for name in vary_headers)})
 
-    def store(self, url: URL, request_headers: Headers, response_headers: Headers, etag, response):
+    def store(
+        self, method: str, url: URL, request_headers: Headers, response_headers: Headers, etag, response
+    ):
         if vary := response_headers.get("vary"):
             self.vary_headers[url] = tuple(i.strip().lower() for i in vary.split(";") if i)
 
-        key = self.get_key(url, request_headers)
+        key = self.get_key(method, url, request_headers)
         self.entries[key] = CacheEntry(etag, response)
 
-    def get(self, url, request_headers):
-        key = self.get_key(url, request_headers)
+    def get(self, method, url, request_headers):
+        key = self.get_key(method, url, request_headers)
         return self.entries.get(key)

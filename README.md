@@ -74,3 +74,14 @@ Modified` response without querying the database. Such a response has an empty b
 
 When sending back a real resource, services include an `ETag` header with hash of the generated JSON document,
 and also a `Vary` header, informing `bff` which HTTP headers were used to construct the cache key.
+
+## Caching requests with body
+
+When sending a POST request, `bff` is supposed to send an additional `Content-Digest` [2] header,
+informing the service about version of the input data. The server may then decide to include this header in
+`Vary` resonse header, informing `bff` that response can be cached.
+
+This makes it possible to cache results of operations that use externally provided data, e.g. calculating the
+audit.
+
+[^2]: https://httpwg.org/http-extensions/draft-ietf-httpbis-digest-headers.html#content-digest
