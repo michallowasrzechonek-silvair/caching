@@ -1,4 +1,4 @@
-import base64
+from base64 import b64encode
 from hashlib import sha1
 from typing import Any, Dict, List
 
@@ -317,10 +317,10 @@ def bff_svc() -> FastAPI:
             node_etag = node_response.headers.get("ETag")
             node = await node_response.json()
 
-        content_digest = sha1(bytes.fromhex(zone_etag + node_etag)).digest()
+        repr_digest = sha1((zone_etag + node_etag).encode()).digest()
         async with client.post(
             urls.RECONF_SVC / "misconfiguration",
-            headers={"Repr-Digest": f"sha1=:{base64.b64encode(content_digest)}:"},
+            headers={"Repr-Digest": f"sha1=:{b64encode(repr_digest).decode()}:"},
             json=dict(zone=zone, node=node),
         ) as response:
             return await response.json()

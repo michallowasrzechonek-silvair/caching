@@ -1,3 +1,4 @@
+from base64 import b64encode
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from functools import partial
@@ -157,12 +158,16 @@ class CachingSend:
         if self.should_cache:
             content = b"".join(body["body"] for body in self.response_body)
 
-            etag = sha1(content).hexdigest()
-            self.response_start["headers"].append((b"ETag", etag.encode()))
+            etag = b64encode(sha1(content).digest())
+            self.response_start["headers"].append((b"ETag", etag))
 
             headers = list(self.response_start["headers"])
             self.cache.store(
-                self.method, str(self.url), request_headers=self.request_headers, response_headers=headers, etag=etag
+                self.method,
+                str(self.url),
+                request_headers=self.request_headers,
+                response_headers=headers,
+                etag=etag.decode()
             )
 
         await self._send(self.response_start)
