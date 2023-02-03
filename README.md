@@ -15,7 +15,7 @@ independent.
 
 ### Internal REST
 
-There are 2 backend services - `projects` and `commissioning`, each using its
+There are 3 backend services - `projects`, `commissioning` and `reconf` each using its
 own database (exclusively) and exposing a REST API.
 
 Each backend service manages its own database using
@@ -24,11 +24,11 @@ newest available revision before service starts.
 
 ### External REST
 
-A third service is an [API
+Another service is an [API
 Gateway](https://microservices.io/patterns/apigateway.html) - `bff`. [^1]
 
 It doesn't use any persistent database, only routes requests coming from
-external clients to either `projects` or `commissioning`, or maybe even both of
+external clients to either `projects`, `commissioning` or `reconf`, or maybe even all of
 them.
 
 For simplicity, we don't use any authentication.
@@ -42,10 +42,10 @@ For simplicity, we don't use any authentication.
 ### Data paths
 
 Requests from external clients (e.g. your CLI) are always routed to `bff`
-first, and only `bff` can access `projects` and `commissioning`.
+first, and only `bff` can access other services.
 
 According to principles outlined in
-[Avoiding Micro-monoliths](https://slides.com/khorne/micro-monolith), both
+[Avoiding Micro-monoliths](https://slides.com/khorne/micro-monolith), 
 backend services don't know about each other - the only client talking to
 either or them if the `bff`.
 
