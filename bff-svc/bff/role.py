@@ -13,9 +13,14 @@ class RoleMiddleware(BaseHTTPMiddleware):
             return m.group("project_id")
 
     async def dispatch(self, request, call_next):
+        email = context.current_headers().get("x-user", "")
+
         if project_id := self._get_project_id(request):
-            async with client.get(urls.PROJECTS_SVC / "projects" / project_id / "role") as response:
-                role = await response.json()
-                context.update_headers(**{"x-role": role})
+            async with client.get(
+                urls.PROJECTS_SVC / "projects" / project_id / "collaborators" / email,
+                headers={"x-role": "permission-checker"},
+            ) as response:
+                collaborator = await response.json()
+                context.update_headers(**{"x-role": collaborator["role"]})
 
         return await call_next(request)

@@ -139,6 +139,22 @@ def projects_svc() -> FastAPI:
 
         return collaborators
 
+    @app.get(
+        "/projects/{project_id}/collaborators/{email}",
+        response_model=CreateCollaborator,
+        dependencies=[project_role()],
+    )
+    async def get_collaborator(project_id: str, email: str, cache_vary=Depends(cache.vary)):
+        collaborator = await Collaborator.get(
+            Collaborator.project_id == project_id, Collaborator.email == email
+        )
+
+        with cache_vary() as invalidate:
+            invalidate(Project, project_id=project_id, _action="delete")
+            invalidate(Collaborator, project_id=project_id, email=email)
+
+        return collaborator
+
     @app.patch(
         "/projects/{project_id}/collaborators",
         response_class=responses.RedirectResponse,
@@ -173,20 +189,6 @@ def projects_svc() -> FastAPI:
     )
     async def delete_project(project_id: str):
         return await Project.delete(Project.project_id == project_id)
-
-    @app.get("/projects/{project_id}/role")
-    async def get_project_role(project_id: str, cache_vary=Depends(cache.vary)):
-        email = context.current_headers().get("x-user")
-
-        collaborator = await Collaborator.get(
-            Collaborator.project_id == project_id, Collaborator.email == email
-        )
-
-        with cache_vary("x-user") as invalidate:
-            invalidate(Project, project_id=project_id, _action="delete")
-            invalidate(Collaborator, project_id=project_id, email=email)
-
-        return collaborator.role
 
     @app.get(
         "/projects/{project_id}/areas",
